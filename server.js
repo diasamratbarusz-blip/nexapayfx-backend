@@ -66,13 +66,14 @@ io.on("connection", (socket) => {
  * Sends a new rate every 1 second to all users for the moving graph
  */
 setInterval(() => {
-  // Generates rate between -0.12 and 0.12 to match the graph scale
+  // Generates rate between -0.12 and 0.12 to match the graph scale in image.png
   const currentRate = (Math.random() * 0.24 - 0.12).toFixed(4);
   io.emit("market-update", { rate: parseFloat(currentRate) });
 }, 1000);
 
 /**
  * AUTOMATED M-PESA CALLBACK (WEBHOOK)
+ * Logic for updating balances and 10% referral bonuses
  */
 app.post("/api/mpesa/callback", async (req, res) => {
     const callbackData = req.body.Body.stkCallback;
@@ -92,9 +93,19 @@ app.post("/api/mpesa/callback", async (req, res) => {
     res.status(200).send("Callback Received");
 });
 
+/**
+ * MARKET RATE API (Fallback)
+ */
+app.get("/api/market/rate", (req, res) => {
+    const currentRate = (Math.random() * 0.24 - 0.12).toFixed(4);
+    res.json({ rate: parseFloat(currentRate) });
+});
+
 // Server Configuration
 const PORT = process.env.PORT || 5000;
-// CRITICAL: Change app.listen to server.listen so Sockets work!
+
+// CRITICAL: We use server.listen (not app.listen) to enable Socket.io functionality
 server.listen(PORT, () => {
   console.log(`Nexapaytrade server is live on port ${PORT}`);
+  console.log(`Automated Callback URL: http://your-domain.com/api/mpesa/callback`);
 });
