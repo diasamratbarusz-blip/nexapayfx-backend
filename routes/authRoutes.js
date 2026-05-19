@@ -1,31 +1,48 @@
-const express = require("express")
-const router = express.Router()
+/**
+ * Nexafxtrade Authentication Routing Node
+ * Path: ./routes/auth.js
+ * Description: Maps network endpoints to the Auth Controller logic.
+ * Version: 3.3.0 (May 2026)
+ */
 
-// Import Controllers
+const express = require("express");
+const router = express.Router();
+
+// Import Controllers 
+// Note: Ensure the path matches your project structure (./controllers/auth.js)
 const {
   register,
   login,
   getMe
-} = require("../controllers/authController")
+} = require("../controllers/auth");
 
 // ========================================
-// AUTH ROUTES
+// AUTH ROUTES - PRIMARY GATEWAYS
 // ========================================
 
-// Register User
-// POST /api/auth/register
-router.post("/register", register)
+/**
+ * @route   POST /api/auth/register
+ * @desc    Initialize new user terminal node
+ * @access  Public
+ */
+router.post("/register", register);
 
-// Login User
-// POST /api/auth/login
-router.post("/login", login)
+/**
+ * @route   POST /api/auth/login
+ * @desc    Authenticate and grant access token
+ * @access  Public
+ */
+router.post("/login", login);
 
-// Get Current Logged In User
-// GET /api/auth/me
-router.get("/me", getMe)
+/**
+ * @route   GET /api/auth/me
+ * @desc    Fetch active operator profile parameters
+ * @access  Private (Requires Auth Middleware)
+ */
+router.get("/me", getMe);
 
 // ========================================
-// EXPORT ROUTER
+// EXPORT ROUTER ENGINE
 // ========================================
 
-module.exports = router
+module.exports = router;
