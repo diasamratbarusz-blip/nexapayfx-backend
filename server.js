@@ -1,6 +1,6 @@
 /**
  * Nexafxtrade Backend Engine
- * Version: 3.1.5 (May 2026)
+ * Version: 3.2.0 (May 2026)
  * Brand: Nexafxtrade (formerly Nexapaytrade)
  */
 
@@ -238,7 +238,7 @@ app.post("/api/mpesa/callback", async (req, res) => {
         
         // Referral Logic: 10% Bonus for the inviter
         const bonus = amount * 0.10;
-        // In your real logic: Find User by Phone -> Update Balance -> Find Referrer -> Add Bonus
+        // Find User by Phone -> Update Balance -> Find Referrer -> Add Bonus
     } 
     res.status(200).send("OK");
 });
