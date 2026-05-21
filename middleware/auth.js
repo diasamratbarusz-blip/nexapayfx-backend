@@ -3,6 +3,7 @@
  * File: middleware/auth.js
  * Description: Validates JWT tokens and protects private terminal routes
  * Version: 3.2.0 (May 2026)
+ * Brand: Nexafxtrade (formerly Nexapaytrade)
  */
 
 const jwt = require("jsonwebtoken");
@@ -21,39 +22,46 @@ const protect = async (req, res, next) => {
     req.headers.authorization.startsWith("Bearer")
   ) {
     try {
-      // Extract token from Bearer string
+      // 1. Extract token from Bearer string
       token = req.headers.authorization.split(" ")[1];
 
-      // Decode and verify the token against your secure key
+      // 2. Decode and verify the token against your secure secret key
+      // The secret must match what is used in your login controller
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Attach the decoded operator ID to the request object
-      // This allows later routes to know exactly which user is trading
+      /**
+       * 3. Attach User Data
+       * We attach the decoded operator ID to the request object.
+       * This allows all following routes (like /api/user/balance) 
+       * to know exactly which operator is making the request.
+       */
       req.user = decoded.id;
 
-      // Log successful verification for security tracking
-      logger.info(`Terminal access granted to node: ${decoded.id.substring(0, 8)}...`);
+      // Log successful verification for terminal security tracking
+      console.log(`[AUTH] Terminal access granted to operator: ${decoded.id.substring(0, 8)}...`);
 
-      // Proceed to the next logic in the pipeline
+      // 4. Proceed to the next logic in the pipeline
       next();
     } catch (error) {
-      logger.error("Terminal Security Breach: Invalid Token Attempt", {
-        error: error.message,
-      });
+      // Catching expired or tampered tokens
+      console.error("====================================");
+      console.error("TERMINAL SECURITY BREACH: INVALID TOKEN");
+      console.error(`Error Logic: ${error.message}`);
+      console.error("====================================");
 
       return res.status(401).json({
         success: false,
-        message: "❌ Security Authorization Failed. Token Invalid.",
+        message: "❌ Security Authorization Failed. Session expired or invalid.",
       });
     }
   }
 
-  // If no token is provided at all
+  // 5. Handle missing token scenario
   if (!token) {
-    logger.warn("Terminal Access Denied: No Authorization Token Found");
+    console.warn("[WARN] Terminal Access Denied: No Authorization Token Found");
     return res.status(401).json({
       success: false,
-      message: "⚠️ Authorization Required. Please log in to your node.",
+      message: "⚠️ Authorization Required. Please log in to your operator node.",
     });
   }
 };
