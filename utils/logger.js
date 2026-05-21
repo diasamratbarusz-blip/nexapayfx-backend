@@ -1,15 +1,17 @@
 /**
  * NEXAFX Logger Utility
  * Handles categorized logging for Trades, Authentication, and System Errors.
+ * Version: 3.2.0 (May 2026)
+ * Brand: Nexafxtrade
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// Ensure log directory exists
+// Ensure log directory exists in the root folder
 const logDir = path.join(__dirname, '../logs');
 if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir);
+    fs.mkdirSync(logDir, { recursive: true });
 }
 
 const colors = {
@@ -20,8 +22,14 @@ const colors = {
     reset: '\x1b[0m'     // Reset
 };
 
+/**
+ * Returns precise Kenyan Time (EAT) for synchronization
+ */
 const getTimestamp = () => {
-    return new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+    return new Date().toLocaleString('en-KE', { 
+        timeZone: 'Africa/Nairobi',
+        hour12: true 
+    });
 };
 
 /**
@@ -32,17 +40,20 @@ const getTimestamp = () => {
  */
 const log = (level, message, metadata = {}) => {
     const timestamp = getTimestamp();
-    const metaString = Object.keys(metadata).length ? ` | Meta: ${JSON.stringify(metadata)}` : '';
+    const metaString = Object.keys(metadata).length ? ` | Data: ${JSON.stringify(metadata)}` : '';
     const logEntry = `[${timestamp}] [${level.toUpperCase()}] ${message}${metaString}`;
 
-    // 1. Log to Console with Colors
+    // 1. Log to Console with Colors for easier Terminal debugging
     const color = colors[level.toLowerCase()] || colors.reset;
     console.log(`${color}${logEntry}${colors.reset}`);
 
-    // 2. Log to File (Persistent storage)
+    // 2. Log to File (Persistent storage for audits)
     const fileName = `${level.toLowerCase()}.log`;
     fs.appendFile(path.join(logDir, fileName), logEntry + '\n', (err) => {
-        if (err) console.error('Failed to write to log file:', err);
+        if (err) {
+            // Fallback if file system is read-only (common in some hosting)
+            console.error('\x1b[31m[CRITICAL] Log Write Failed:\x1b[0m', err.message);
+        }
     });
 };
 
@@ -52,11 +63,14 @@ const logger = {
     warn: (msg, meta) => log('warn', msg, meta),
     error: (msg, meta) => log('error', msg, meta),
     
-    // Custom helper for M-Pesa Tracking
-    mpesa: (msg, meta) => log('info', `[M-PESA] ${msg}`, meta),
+    // Custom helper for M-Pesa STK Push & Callback Tracking
+    mpesa: (msg, meta) => log('info', `[M-PESA-GATEWAY] ${msg}`, meta),
     
-    // Custom helper for Trade Monitoring
-    trade: (msg, meta) => log('success', `[TRADE] ${msg}`, meta)
+    // Custom helper for Trade Predicition Engine Monitoring
+    trade: (msg, meta) => log('success', `[TRADE-ENGINE] ${msg}`, meta),
+
+    // System health check log
+    system: (msg, meta) => log('info', `[SYSTEM-CORE] ${msg}`, meta)
 };
 
 module.exports = logger;
