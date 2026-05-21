@@ -3,13 +3,17 @@
  * Path: ./routes/auth.js
  * Description: Maps network endpoints to the Auth Controller logic.
  * Version: 3.3.0 (May 2026)
+ * Brand: Nexafxtrade (formerly Nexapaytrade)
  */
 
 const express = require("express");
 const router = express.Router();
 
+// Import Middleware
+// This protects private nodes from unauthorized access
+const { protect } = require("../middleware/auth");
+
 // Import Controllers 
-// Note: Ensure the path matches your project structure (./controllers/auth.js)
 const {
   register,
   login,
@@ -29,7 +33,7 @@ router.post("/register", register);
 
 /**
  * @route   POST /api/auth/login
- * @desc    Authenticate and grant access token
+ * @desc    Authenticate operator and grant access token
  * @access  Public
  */
 router.post("/login", login);
@@ -37,9 +41,10 @@ router.post("/login", login);
 /**
  * @route   GET /api/auth/me
  * @desc    Fetch active operator profile parameters
- * @access  Private (Requires Auth Middleware)
+ * @access  Private (Requires protect middleware)
  */
-router.get("/me", getMe);
+// Added 'protect' here to ensure only logged-in users can see their profile
+router.get("/me", protect, getMe);
 
 // ========================================
 // EXPORT ROUTER ENGINE
