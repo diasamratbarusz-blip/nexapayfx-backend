@@ -1,7 +1,8 @@
 /**
  * Nexafxtrade Backend Engine
- * Version: 3.2.0 (May 2026)
+ * Version: 3.3.0 (May 2026)
  * Brand: Nexafxtrade (formerly Nexapaytrade)
+ * Description: Core entry point handling Socket.io, M-Pesa callbacks, and API routes.
  */
 
 const express = require("express");
@@ -10,6 +11,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const http = require("http");
 const { Server } = require("socket.io");
+const logger = require("./utils/logger");
 
 // Load environment variables
 dotenv.config();
@@ -19,17 +21,18 @@ const server = http.createServer(app);
 
 /**
  * 1. ENHANCED CORS CONFIGURATION
- * This prevents the "Failed to Fetch" error by allowing 
- * your frontend to communicate with this backend.
+ * Essential to stop the "❌ CONNECTION FAILED" error on the frontend.
+ * This allows your terminal (localhost or Render) to talk to this server.
  */
 app.use(cors({
-  origin: "*", // Allows all domains. Change to your specific URL when live.
+  origin: "*", 
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.use(express.json());
 
+// Initialize Socket.io with explicit CORS matching
 const io = new Server(server, {
   cors: {
     origin: "*", 
@@ -41,50 +44,52 @@ const io = new Server(server, {
 let currentMarketRate = 8421500; 
 let forcedAdminTrend = "AUTO";   
 
-// Main brand identification
+// Database Connection Logic
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => logger.system("MongoDB Connected Successfully"))
+  .catch(err => logger.error("CRITICAL: MongoDB Connection Error:", { error: err.message }));
+
+// Main brand identification for health check
 app.get("/", (req, res) => {
   res.send("Nexafxtrade | High-Performance Trading Engine Running");
 });
 
-// Database Connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected Successfully"))
-  .catch(err => console.log("MongoDB Connection Error:", err));
-
-// Route Imports
+/**
+ * 2. ROUTE BINDING
+ * Ensure these files exist in your /routes folder
+ */
 const authRoutes = require("./routes/authRoutes");
 const paymentRoutes = require("./routes/paymentRoutes"); 
 const userRoutes = require("./routes/User"); 
 
-// Use Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/user", userRoutes);
 
 /**
- * REAL-TIME ENGINE (Socket.io)
- * Handles live charts, social proof chat, and the 30-second trade loop
+ * 3. REAL-TIME ENGINE (Socket.io)
  */
 io.on("connection", (socket) => {
-  console.log("New Trader Connected to Nexafxtrade");
+  logger.info("New Trader Connected to Terminal Node", { socketId: socket.id });
 
+  // Initial Sync
   socket.emit('admin-force-market-trend', { trend: forcedAdminTrend });
   socket.emit('market-update', { rate: currentMarketRate });
 
-  // 1. CHAT & SOCIAL PROOF
+  // Chat & Social Proof Pipeline
   socket.on("send-chat", (data) => {
     io.emit("receive-chat", {
       user: data.user,
       message: data.message,
-      time: new Date().toLocaleTimeString()
+      time: new Date().toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi' })
     });
   });
 
-  // 2. ADMIN PANEL INTERCEPT CONTROL HOOKS
+  // Admin Overrides
   socket.on("admin-force-gateway-rate", (data) => {
     if (data && typeof data.rate === 'number') {
       currentMarketRate = Math.floor(data.rate);
-      console.log(`CRITICAL: Admin updated Gateway Base Rate to BTC/KES ${currentMarketRate}`);
+      logger.warn(`Admin Override: Gateway Rate set to ${currentMarketRate}`);
       io.emit("market-update", { rate: currentMarketRate });
     }
   });
@@ -93,7 +98,7 @@ io.on("connection", (socket) => {
     if (data && data.marketTrend) {
       forcedAdminTrend = data.marketTrend;
       io.emit("admin-force-market-trend", { trend: forcedAdminTrend });
-      if (data.customSpikeRate !== '' && !isNaN(data.customSpikeRate)) {
+      if (data.customSpikeRate && !isNaN(data.customSpikeRate)) {
         currentMarketRate += parseFloat(data.customSpikeRate);
         io.emit("market-update", { rate: currentMarketRate });
       }
@@ -106,17 +111,13 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("admin-global-broadcast", (data) => {
-    if (data && data.msg) {
-      io.emit("admin-global-broadcast", { msg: data.msg });
-    }
-  });
-
-  // 3. TRADE EXECUTION ENGINE
+  // 4. TRADE EXECUTION ENGINE (30-Second prediction loop)
   socket.on("place-trade", (data) => {
     const entryPrice = currentMarketRate;
     const amount = parseFloat(data.amount);
     
+    logger.trade(`Trade Placed: ${data.type} KES ${amount} at ${entryPrice}`);
+
     setTimeout(() => {
       const exitPrice = currentMarketRate;
       let win = false;
@@ -124,7 +125,7 @@ io.on("connection", (socket) => {
       if (data.type === 'BUY' && exitPrice > entryPrice) win = true;
       if (data.type === 'SELL' && exitPrice < entryPrice) win = true;
 
-      const payout = win ? (amount * 1.85) : 0; 
+      const payout = win ? (amount * 1.85) : 0; // 85% Profit
 
       socket.emit("trade-result", {
         status: win ? "WIN" : "LOSS",
@@ -143,48 +144,56 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("Trader disconnected");
+    logger.info("Trader disconnected from terminal");
   });
 });
 
 /**
- * MARKET RATE GENERATOR
+ * 5. MARKET RATE GENERATOR
+ * Simulates high-volatility movement
  */
 setInterval(() => {
+  let dynamicShift = 0;
   if (forcedAdminTrend === "AUTO") {
-    const dynamicShift = (Math.random() - 0.48) * (8000 / 15);
-    currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
+    dynamicShift = (Math.random() - 0.48) * (8500 / 15);
   } else if (forcedAdminTrend === "HIGH") {
-    const dynamicShift = (Math.random() * (45000 / 15)) + 1800;
-    currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
+    dynamicShift = (Math.random() * (45000 / 15)) + 2000;
   } else if (forcedAdminTrend === "LOW") {
-    const dynamicShift = -((Math.random() * (45000 / 15)) + 1800);
-    currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
+    dynamicShift = -((Math.random() * (45000 / 15)) + 2000);
   }
+  
+  currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
   io.emit("market-update", { rate: currentMarketRate });
 }, 1000);
 
 /**
- * MPESA CALLBACK HANDLING
+ * 6. MPESA CALLBACK HANDLING
  */
 app.post("/api/mpesa/callback", async (req, res) => {
-    const callbackData = req.body.Body.stkCallback;
-    if (callbackData.ResultCode === 0) {
-        const metadata = callbackData.CallbackMetadata.Item;
-        const amount = metadata.find(item => item.Name === 'Amount').Value;
-        const phone = metadata.find(item => item.Name === 'PhoneNumber').Value;
-        console.log(`Nexafxtrade Deposit: KSh ${amount} confirmed for ${phone}`);
-        // Logic for 10% bonus goes here
-    } 
-    res.status(200).send("OK");
+    try {
+        const callbackData = req.body.Body.stkCallback;
+        if (callbackData.ResultCode === 0) {
+            const metadata = callbackData.CallbackMetadata.Item;
+            const amount = metadata.find(item => item.Name === 'Amount').Value;
+            const phone = metadata.find(item => item.Name === 'PhoneNumber').Value;
+            
+            logger.mpesa(`Deposit Confirmed: KES ${amount} for ${phone}`);
+            // Logic for balance update and 10% referral bonus should be triggered here
+        } 
+        res.status(200).send("OK");
+    } catch (err) {
+        logger.error("M-Pesa Callback processing failed", { error: err.message });
+        res.status(500).send("Error");
+    }
 });
 
+// Fallback API for market rate
 app.get("/api/market/rate", (req, res) => {
     res.json({ rate: currentMarketRate });
 });
 
-// Port Logic
+// Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Nexafxtrade Live at: http://localhost:${PORT}`);
+  logger.system(`Nexafxtrade Terminal Live at Port: ${PORT}`);
 });
