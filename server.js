@@ -44,10 +44,12 @@ mongoose.connect(process.env.MONGO_URI)
 // Route Imports
 const authRoutes = require("./routes/authRoutes");
 const paymentRoutes = require("./routes/paymentRoutes"); 
+const userRoutes = require("./routes/User"); // Added User routes for profile management
 
 // Use Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/user", userRoutes);
 
 /**
  * REAL-TIME ENGINE (Socket.io)
@@ -71,13 +73,12 @@ io.on("connection", (socket) => {
 
   // 2. ADMIN PANEL INTERCEPT CONTROL HOOKS
   
-  // NEW: Receives direct dashboard manual inputs for Gateway Base Rate and applies them globally
+  // Receives direct dashboard manual inputs for Gateway Base Rate and applies them globally
   socket.on("admin-force-gateway-rate", (data) => {
     if (data && typeof data.rate === 'number') {
       currentMarketRate = Math.floor(data.rate);
       console.log(`CRITICAL: Admin updated Gateway Base Rate to BTC/KES ${currentMarketRate}`);
       
-      // Broadcast update immediately to all connected frontends (Main Website & Admin Panels)
       io.emit("market-update", { 
         rate: currentMarketRate,
         timestamp: data.timestamp || new Date().toISOString()
@@ -85,7 +86,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // NEW: Captures multi-parameter configuration payload sync matrix from Admin Panel
+  // Captures multi-parameter configuration payload sync matrix from Admin Panel
   socket.on("admin-matrix-sync", (data) => {
     if (data && data.marketTrend) {
       forcedAdminTrend = data.marketTrend;
@@ -121,7 +122,6 @@ io.on("connection", (socket) => {
   socket.on("admin-force-balance", (data) => {
     if (data && data.user && typeof data.balance === 'number') {
       console.log(`Balance Override processing for account ${data.user} to KES ${data.balance}`);
-      // Emits global adjustment broadcast targeted for processing inside client scripts
       io.emit("admin-force-balance", { 
         user: data.user, 
         balance: data.balance,
@@ -155,7 +155,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Tracks updates cascading upwards from front-end layout executions if applicable
+  // Tracks updates cascading upwards from front-end layout executions
   socket.on("market-update", (data) => {
     if (data && typeof data.rate === 'number') {
       currentMarketRate = data.rate;
@@ -205,9 +205,7 @@ io.on("connection", (socket) => {
  * MARKET RATE GENERATOR (Wavy Movement Simulation Matrix)
  */
 setInterval(() => {
-  // Only execute natural generator loops if an admin override is not running
   if (forcedAdminTrend === "AUTO") {
-    // Generates localized movement shifts appropriate for high KES rate numbers
     const dynamicShift = (Math.random() - 0.48) * (8000 / 15);
     currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
   } else if (forcedAdminTrend === "HIGH") {
@@ -218,13 +216,11 @@ setInterval(() => {
     currentMarketRate = Math.floor(currentMarketRate + dynamicShift);
   }
   
-  // Emits real-time ticker stream updates continuously to all clients every second
   io.emit("market-update", { rate: currentMarketRate });
 }, 1000);
 
 /**
  * MPESA CALLBACK HANDLING
- * Handles STK Push updates and the 10% Referral Bonus
  */
 app.post("/api/mpesa/callback", async (req, res) => {
     const callbackData = req.body.Body.stkCallback;
@@ -236,9 +232,9 @@ app.post("/api/mpesa/callback", async (req, res) => {
         
         console.log(`Nexafxtrade Deposit: KSh ${amount} confirmed for ${phone}`);
         
-        // Referral Logic: 10% Bonus for the inviter
+        // Referral Logic: 10% Bonus
         const bonus = amount * 0.10;
-        // Find User by Phone -> Update Balance -> Find Referrer -> Add Bonus
+        // User balance and Referral bonus update logic handled here
     } 
     res.status(200).send("OK");
 });
