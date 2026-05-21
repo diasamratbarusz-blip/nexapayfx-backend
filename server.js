@@ -12,9 +12,13 @@ const dotenv = require("dotenv");
 const http = require("http");
 const { Server } = require("socket.io");
 const logger = require("./utils/logger");
+const connectDB = require("./config/db");
 
 // Load environment variables
 dotenv.config();
+
+// Connect to Database
+connectDB();
 
 const app = express();
 const server = http.createServer(app);
@@ -44,7 +48,7 @@ const io = new Server(server, {
 let currentMarketRate = 8421500; 
 let forcedAdminTrend = "AUTO";   
 
-// Database Connection Logic
+// Database Connection Logic (Kept intact with custom logger)
 mongoose.connect(process.env.MONGO_URI)
   .then(() => logger.system("MongoDB Connected Successfully"))
   .catch(err => logger.error("CRITICAL: MongoDB Connection Error:", { error: err.message }));
