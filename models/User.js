@@ -1,24 +1,30 @@
 /**
  * Nexafxtrade User Data Model
  * Path: ./models/User.js
- * Description: Defines the architectural schema for platform operators.
- * Includes automated referral generation and phone normalization middleware.
- * Version: 3.3.0 (May 2026)
+ * Description: Defines the user structure, handles phone numbers, and referrals.
+ * Version: 4.0.0 (Fixed missing email & safer referral codes)
  */
 
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
-  // --- Basic Identification Node ---
+  // --- Basic Info ---
   name: {
     type: String,
     required: false,
     trim: true
   },
+  email: {
+    type: String,
+    required: true,       // Required because our login/register uses email
+    unique: true,         // No two users can have the same email
+    trim: true,
+    lowercase: true       // Automatically makes emails lowercase to prevent duplicates
+  },
   phone: {
     type: String,
     required: true,
-    unique: true, // Critical: Prevents duplicate account mapping
+    unique: true, 
     trim: true
   },
   password: {
@@ -26,23 +32,20 @@ const userSchema = new mongoose.Schema({
     required: true
   },
 
-  // --- Financial Status Parameters ---
+  // --- Money & Wallet ---
   balance: {
     type: Number,
     default: 0
   },
 
-  // --- Referral Ecosystem (10% Bonus Logic Hooks) ---
+  // --- Referral System (10% Bonus) ---
   referralCode: {
     type: String,
-    unique: true,
-    default: function() {
-      // Generates a unique 6-character alphanumeric identifier
-      return Math.random().toString(36).substring(2, 8).toUpperCase();
-    }
+    unique: true
+    // Note: We generate this in the middleware below to prevent duplicates
   },
   referredBy: {
-    type: String, // Stores the unique referralCode of the inviter
+    type: String, 
     default: null
   },
   referralEarnings: {
@@ -50,7 +53,7 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
 
-  // --- System Role & Security Flags ---
+  // --- Security & Roles ---
   role: {
     type: String,
     enum: ["user", "admin"],
@@ -61,7 +64,7 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   
-  // --- Temporal Tracking ---
+  // --- Date Tracking ---
   createdAt: {
     type: Date,
     default: Date.now
@@ -69,11 +72,11 @@ const userSchema = new mongoose.Schema({
 });
 
 /**
- * MIDDLEWARE: PHONE NORMALIZATION
- * Automatically converts local Kenyan prefixes to international standards.
- * Transforms '07...' to '2547...' and strips '+' signs before database commit.
+ * MIDDLEWARE: Runs automatically before saving a user to the database.
  */
 userSchema.pre("save", function(next) {
+  
+  // 1. Fix Phone Number (Converts '07...' to '2547...')
   if (this.isModified("phone")) {
     if (this.phone.startsWith("0")) {
       this.phone = "254" + this.phone.substring(1);
@@ -81,8 +84,15 @@ userSchema.pre("save", function(next) {
       this.phone = this.phone.substring(1);
     }
   }
+
+  // 2. Generate a Safe Referral Code (If one doesn't exist yet)
+  if (!this.referralCode) {
+    // Creates a random 8-character code (much safer than 6 characters)
+    this.referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+  }
+
   next();
 });
 
-// Safeguard against model re-compilation errors during hot-reloads
+// Safeguard against model re-compilation errors on Vercel
 module.exports = mongoose.models.User || mongoose.model("User", userSchema);
