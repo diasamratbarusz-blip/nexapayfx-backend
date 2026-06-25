@@ -1,53 +1,65 @@
 /**
- * Nexafxtrade Backend Engine - Database Module
+ * Nexafxtrade Backend Engine - Database Module (Vercel Optimized)
  * File: config/db.js
- * Description: MongoDB Connection with Mongoose
- * Version: 3.2.0 (May 2026)
+ * Description: MongoDB Connection with Caching for Serverless
+ * Version: 4.0.0 (Optimized for Vercel)
  */
 
 const mongoose = require("mongoose");
 
 /**
- * Initialize MongoDB Connection
- * Configured for high-availability Atlas clusters
+ * Global is used here to maintain a cached connection across serverless 
+ * function invocations. This prevents connections from growing exponentially 
+ * and exhausting MongoDB Atlas limits.
  */
-const connectDB = async () => {
-  try {
-    // Establishing connection to terminal database node
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      // Modern driver configurations
-      autoIndex: true, 
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of hanging
-      socketTimeoutMS: 45000,         // Close sockets after 45s of inactivity
-    });
+let cached = global.mongoose;
 
-    // Success terminal notification
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+const connectDB = async () => {
+  // 1. If we already have a cached connection, reuse it instantly (No lag!)
+  if (cached.conn) {
+    return cached.conn;
+  }
+
+  // 2. If not, establish a new connection
+  if (!cached.promise) {
+    const opts = {
+      autoIndex: true, 
+      serverSelectionTimeoutMS: 5000, 
+      socketTimeoutMS: 45000,
+      bufferCommands: false, // Crucial for serverless environments
+    };
+
+    cached.promise = mongoose.connect(process.env.MONGO_URI, opts).then((mongoose) => {
+      return mongoose;
+    });
+  }
+  
+  try {
+    cached.conn = await cached.promise;
+    
     console.log("====================================");
     console.log(`NEXAFX DATABASE: ONLINE`);
-    console.log(`Host: ${conn.connection.host}`);
-    console.log(`Node Name: ${conn.connection.name}`);
-    console.log("Status: Connection Synchronized");
+    console.log(`Host: ${cached.conn.connection.host}`);
+    console.log("Status: Connection Synchronized (Cached)");
     console.log("====================================");
-
-    // Listen for connection drops after initial success
-    mongoose.connection.on('error', err => {
-      console.error(`[CRITICAL] MongoDB Post-Connection Error: ${err}`);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.log(' [WARN] MongoDB Disconnected. Attempting to re-synchronize...');
-    });
-
+    
   } catch (error) {
-    // Error notification for terminal initialization
-    console.log("====================================");
+    cached.promise = null; // Reset promise on failure so it can retry
+    
+    console.error("====================================");
     console.error("NEXAFX DATABASE: CONNECTION FAILED");
     console.error(`Error Logic: ${error.message}`);
-    console.log("====================================");
+    console.error("====================================");
 
-    // Exit application process with failure code
-    process.exit(1);
+    // Throw error instead of process.exit(1) for serverless safety
+    throw new Error("MongoDB Connection Failed");
   }
+
+  return cached.conn;
 };
 
 // Exporting terminal synchronization module
