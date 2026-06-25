@@ -1,18 +1,11 @@
 /**
  * NEXAFX Logger Utility
  * Handles categorized logging for Trades, Authentication, and System Errors.
- * Version: 3.2.0 (May 2026)
+ * Version: 3.3.0 (Optimized for Vercel Serverless)
  * Brand: Nexafxtrade
  */
 
-const fs = require('fs');
-const path = require('path');
-
-// Ensure log directory exists in the root folder
-const logDir = path.join(__dirname, '../logs');
-if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-}
+// Note: 'fs' and 'path' are removed because Vercel has a read-only file system.
 
 const colors = {
     info: '\x1b[36m',    // Cyan
@@ -43,18 +36,17 @@ const log = (level, message, metadata = {}) => {
     const metaString = Object.keys(metadata).length ? ` | Data: ${JSON.stringify(metadata)}` : '';
     const logEntry = `[${timestamp}] [${level.toUpperCase()}] ${message}${metaString}`;
 
-    // 1. Log to Console with Colors for easier Terminal debugging
     const color = colors[level.toLowerCase()] || colors.reset;
-    console.log(`${color}${logEntry}${colors.reset}`);
+    const coloredLog = `${color}${logEntry}${colors.reset}`;
 
-    // 2. Log to File (Persistent storage for audits)
-    const fileName = `${level.toLowerCase()}.log`;
-    fs.appendFile(path.join(logDir, fileName), logEntry + '\n', (err) => {
-        if (err) {
-            // Fallback if file system is read-only (common in some hosting)
-            console.error('\x1b[31m[CRITICAL] Log Write Failed:\x1b[0m', err.message);
-        }
-    });
+    // Use the appropriate console method based on the level for better log filtering
+    if (level.toLowerCase() === 'error') {
+        console.error(coloredLog);
+    } else if (level.toLowerCase() === 'warn') {
+        console.warn(coloredLog);
+    } else {
+        console.log(coloredLog);
+    }
 };
 
 const logger = {
@@ -66,7 +58,7 @@ const logger = {
     // Custom helper for M-Pesa STK Push & Callback Tracking
     mpesa: (msg, meta) => log('info', `[M-PESA-GATEWAY] ${msg}`, meta),
     
-    // Custom helper for Trade Predicition Engine Monitoring
+    // Custom helper for Trade Prediction Engine Monitoring
     trade: (msg, meta) => log('success', `[TRADE-ENGINE] ${msg}`, meta),
 
     // System health check log
