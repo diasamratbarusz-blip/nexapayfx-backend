@@ -1,11 +1,10 @@
 /**
  * Nexafxtrade Backend Engine (Vercel Serverless Edition)
- * Version: 4.0.0 (Optimized for Vercel)
+ * Version: 4.1.0 (Fixed double DB connection & route names)
  * Brand: Nexafxtrade
  */
 
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const logger = require("./utils/logger");
@@ -14,36 +13,34 @@ const connectDB = require("./config/db");
 // Load environment variables
 dotenv.config();
 
-// Connect to Database
+// Connect to Database (This uses the smart caching file we fixed earlier)
 connectDB();
 
 const app = express();
 
 /**
- * 1. ENHANCED CORS CONFIGURATION
+ * 1. BASIC SETUP
  */
+// Allow frontend to talk to backend
 app.use(cors({
   origin: "*", 
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
+// Allow app to read JSON data
 app.use(express.json());
 
-// Database Connection Logic
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => logger.system("MongoDB Connected Successfully"))
-  .catch(err => logger.error("CRITICAL: MongoDB Connection Error:", { error: err.message }));
-
-// Main brand identification for health check
+// Main page health check
 app.get("/", (req, res) => {
   res.send("Nexafxtrade | High-Performance Trading Engine Running on Vercel");
 });
 
 /**
  * 2. ROUTE BINDING
+ * (Make sure these names match the actual files in your 'routes' folder!)
  */
-const authRoutes = require("./routes/authRoutes");
+const authRoutes = require("./routes/auth");         // Changed from authRoutes to auth
 const paymentRoutes = require("./routes/paymentRoutes"); 
 const userRoutes = require("./routes/User"); 
 
@@ -72,9 +69,11 @@ app.post("/api/mpesa/callback", async (req, res) => {
     }
 });
 
-// Fallback API for market rate
+/**
+ * 4. MARKET RATE API
+ */
 app.get("/api/market/rate", (req, res) => {
-    // Since setInterval doesn't work on Vercel, we generate a random rate on the fly
+    // Since Vercel goes to sleep, we just calculate a random rate when asked
     const baseRate = 8421500; 
     const dynamicShift = (Math.random() - 0.48) * (8500 / 15);
     const currentMarketRate = Math.floor(baseRate + dynamicShift);
@@ -82,8 +81,7 @@ app.get("/api/market/rate", (req, res) => {
 });
 
 /**
- * 4. EXPORT FOR VERCEL (CRITICAL)
- * Vercel requires you to EXPORT the app. 
+ * 5. EXPORT FOR VERCEL (CRITICAL)
  * DO NOT use server.listen() on Vercel!
  */
 module.exports = app;
