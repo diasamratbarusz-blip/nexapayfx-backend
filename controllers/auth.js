@@ -1,45 +1,50 @@
 /**
  * Nexafxtrade Auth Controller
- * Path: ./controllers/authController.js
+ * File: controllers/auth.js
  * Description: Secure Registration, Login, and Profile Retrieval.
- * Version: 4.0.0 (Security Hardened for Vercel)
+ * Version: 4.1.0 (Fixed missing phone field)
  */
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const logger = require("../utils/logger"); // Added for consistent Vercel logging
+const logger = require("../utils/logger");
 
 // ========================================
 // REGISTER USER
 // ========================================
 exports.register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    // FIX: Added 'phone' to the destructuring so we actually grab it from the frontend
+    const { name, email, phone, password } = req.body;
 
-    // Validate fields
-    if (!name || !email || !password) {
+    // Validate ALL required fields including phone
+    if (!name || !email || !phone || !password) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required"
+        message: "All fields (name, email, phone, password) are required"
       });
     }
 
-    // Check existing user
-    const existingUser = await User.findOne({ email });
+    // Check existing user by email OR phone
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { phone }] 
+    });
+
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "User already exists"
+        message: "User with this email or phone already exists"
       });
     }
 
-    // Hash password (Cost 10 is optimal for serverless to prevent CPU timeouts)
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user WITH the phone number
     const user = await User.create({
       name,
       email,
+      phone, // FIX: Now passing the phone number to the database
       password: hashedPassword
     });
 
@@ -66,10 +71,8 @@ exports.register = async (req, res) => {
     });
 
   } catch (error) {
-    // Log the actual error to Vercel Dashboard for debugging
     logger.error("Registration Error", { error: error.message, email: req.body.email });
     
-    // SECURITY FIX: Do not expose internal error messages to the client
     res.status(500).json({
       success: false,
       message: "Server error during registration"
@@ -84,7 +87,6 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validate fields
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -92,10 +94,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Find user (Explicitly select password in case it's hidden by default in the schema)
     const user = await User.findOne({ email }).select("+password");
 
-    // SECURITY FIX: Generic message to prevent User Enumeration attacks
     if (!user) {
       return res.status(400).json({
         success: false,
@@ -103,10 +103,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
     
-    // SECURITY FIX: Same generic message if password is wrong
     if (!isMatch) {
       return res.status(400).json({
         success: false,
@@ -114,7 +112,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generate token
     const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
@@ -123,7 +120,6 @@ exports.login = async (req, res) => {
 
     logger.info(`Operator Logged In: ${email}`);
 
-    // Send response
     res.status(200).json({
       success: true,
       message: "Login successful",
@@ -151,8 +147,6 @@ exports.login = async (req, res) => {
 // ========================================
 exports.getMe = async (req, res) => {
   try {
-    // Note: We use req.user.id || req.user to ensure compatibility 
-    // regardless of how your auth middleware attaches the decoded token.
     const userId = req.user.id || req.user; 
     
     const user = await User.findById(userId).select("-password");
