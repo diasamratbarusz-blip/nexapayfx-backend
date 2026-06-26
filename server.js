@@ -1,6 +1,6 @@
 /**
  * Nexafxtrade Backend Engine (Vercel Serverless Edition)
- * Version: 4.2.0 (Fixed file name mismatches)
+ * Version: 4.3.0 (Fixed database connection timing)
  * Brand: Nexafxtrade
  */
 
@@ -12,11 +12,6 @@ const connectDB = require("./config/db");
 
 // Load environment variables
 dotenv.config();
-
-// Connect to Database safely
-connectDB().catch(err => {
-    console.error("Database connection failed:", err.message);
-});
 
 const app = express();
 
@@ -31,18 +26,31 @@ app.use(cors({
 
 app.use(express.json());
 
+/**
+ * 2. CRITICAL FIX: Wait for Database Connection
+ * This forces the app to wait for MongoDB to be 100% connected 
+ * before processing ANY request. This prevents the bufferCommands error.
+ */
+app.use(async (req, res, next) => {
+    try {
+        await connectDB();
+        next();
+    } catch (err) {
+        console.error("Database middleware failed:", err.message);
+        res.status(500).json({ success: false, message: "Database connection failed" });
+    }
+});
+
 // Main page health check
 app.get("/", (req, res) => {
   res.send("Nexafxtrade | High-Performance Trading Engine Running on Vercel");
 });
 
 /**
- * 2. ROUTE BINDING (FIXED TO MATCH YOUR GITHUB FILES EXACTLY)
+ * 3. ROUTE BINDING
  */
-// Using Auth.js (Capital A) because that is what exists in your folder
 const authRoutes = require("./routes/Auth");         
 const paymentRoutes = require("./routes/paymentRoutes"); 
-// Using User.js (Capital U) because that is what exists in your folder
 const userRoutes = require("./routes/User"); 
 
 app.use("/api/auth", authRoutes);
@@ -50,7 +58,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/user", userRoutes);
 
 /**
- * 3. MPESA CALLBACK HANDLING
+ * 4. MPESA CALLBACK HANDLING
  */
 app.post("/api/mpesa/callback", async (req, res) => {
     try {
@@ -70,7 +78,7 @@ app.post("/api/mpesa/callback", async (req, res) => {
 });
 
 /**
- * 4. MARKET RATE API
+ * 5. MARKET RATE API
  */
 app.get("/api/market/rate", (req, res) => {
     const baseRate = 8421500; 
@@ -80,6 +88,6 @@ app.get("/api/market/rate", (req, res) => {
 });
 
 /**
- * 5. EXPORT FOR VERCEL
+ * 6. EXPORT FOR VERCEL
  */
 module.exports = app;
