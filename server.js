@@ -1,6 +1,6 @@
 /**
  * Nexafxtrade Backend Engine (Vercel Serverless Premium Edition)
- * Version: 5.0.0 (Synchronized Structure)
+ * Version: 5.1.0 (Fixed Route Capitalization)
  * Brand: Nexafxtrade
  */
 
@@ -36,19 +36,9 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow programmatic requests with no origin context (like mobile apps, postman, or curl)
         if (!origin) return callback(null, true);
-        
-        // Match development environments
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            return callback(null, true);
-        }
-
-        // Safer wildcard inclusions for custom domain targets
-        if (origin.includes("vercel.app") || origin.includes("nexafxtrade.com")) {
-            return callback(null, true);
-        }
-        
+        if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+        if (origin.includes("vercel.app") || origin.includes("nexafxtrade.com")) return callback(null, true);
         return callback(new Error("Not allowed by CORS engine"));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -56,7 +46,6 @@ app.use(cors({
     credentials: true
 }));
 
-// Globally intercept and respond instantly to preflight OPTIONS checks before any database execution blocks them
 app.options("*", (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -171,12 +160,14 @@ app.post("/api/mpesa/callback", handleMpesaCallback);
 
 /**
  * =========================================
- * ROUTE BINDING
+ * ROUTE BINDING (FIXED CAPITALIZATION)
  * =========================================
  */
-const authRoutes = require("./routes/auth");         
+// ⚠️ LOOK HERE: Changed "./routes/auth" to "./routes/Auth" (Capital A)
+// ⚠️ LOOK HERE: Changed "./routes/user" to "./routes/User" (Capital U)
+const authRoutes = require("./routes/Auth");         
 const paymentRoutes = require("./routes/paymentRoutes"); 
-const userRoutes = require("./routes/user"); 
+const userRoutes = require("./routes/User"); 
 
 app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
@@ -204,7 +195,7 @@ app.get("/", (req, res) => {
         status: "online", 
         brand: "Nexafxtrade",
         message: "High-Performance Trading Engine Running on Vercel Serverless Architecture.",
-        version: "5.0.0"
+        version: "5.1.0"
     });
 });
 
