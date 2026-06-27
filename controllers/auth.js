@@ -1,8 +1,8 @@
 /**
  * Nexafxtrade Auth Controller
  * File: controllers/auth.js
- * Description: Secure Registration, Login, and Profile Retrieval.
- * Version: 4.1.1 (Defensive Logging & Variable Fallbacks for Serverless)
+ * Description: Secure Registration, Login, and Profile Retrieval with Live Debugging.
+ * Version: 4.1.2 (Diagnostic Debug Edition)
  */
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
@@ -18,7 +18,6 @@ const safeLog = (type, message, meta = {}) => {
       console.log(`[${type.toUpperCase()}] ${message}`, JSON.stringify(meta));
     }
   } catch (err) {
-    // Fallback completely to default Vercel console logs if the logger crashes
     console.log(`[FALLBACK-${type.toUpperCase()}] ${message}`);
   }
 };
@@ -61,13 +60,8 @@ exports.register = async (req, res) => {
       password: hashedPassword
     });
 
-    // Fallback for JWT secret to prevent unhandled app crashes during deployment testing
+    // Handle token sign safely
     const secret = process.env.JWT_SECRET || "fallback_local_secret_temp";
-    if (!process.env.JWT_SECRET) {
-      console.warn("WARNING: JWT_SECRET environment variable is not defined in Vercel!");
-    }
-
-    // Generate token
     const token = jwt.sign(
       { id: user._id },
       secret,
@@ -76,7 +70,6 @@ exports.register = async (req, res) => {
 
     safeLog("info", `New Operator Registered: ${email}`);
 
-    // Send response
     return res.status(201).json({
       success: true,
       message: "Registration successful",
@@ -92,10 +85,16 @@ exports.register = async (req, res) => {
   } catch (error) {
     safeLog("error", "Registration Error", { error: error.message, email: req.body?.email });
     
+    // ==========================================================
+    // CRITICAL LIVE DIAGNOSTIC TRAP
+    // This tells us the exact block, string, or index that fails.
+    // ==========================================================
     return res.status(500).json({
       success: false,
       message: "Server error during registration",
-      errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
+      DIAGNOSTIC_ERR_NAME: error.name,
+      DIAGNOSTIC_ERR_MSG: error.message,
+      DIAGNOSTIC_STACK: error.stack
     });
   }
 };
