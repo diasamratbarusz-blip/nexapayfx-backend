@@ -1,6 +1,6 @@
 /**
  * Nexafxtrade Backend Engine (Vercel Serverless Edition)
- * Version: 4.3.0 (Fixed database connection timing)
+ * Version: 4.3.1 (Optimized Serverless DB Caching)
  * Brand: Nexafxtrade
  */
 
@@ -27,18 +27,13 @@ app.use(cors({
 app.use(express.json());
 
 /**
- * 2. CRITICAL FIX: Wait for Database Connection
- * This forces the app to wait for MongoDB to be 100% connected 
- * before processing ANY request. This prevents the bufferCommands error.
+ * 2. OPTIMIZED DB CONNECTION FOR SERVERLESS
+ * Fire the connection immediately. Mongoose will buffer model queries 
+ * internally until the connection succeeds, preventing failure without clogging 
+ * the Express middleware request pipeline.
  */
-app.use(async (req, res, next) => {
-    try {
-        await connectDB();
-        next();
-    } catch (err) {
-        console.error("Database middleware failed:", err.message);
-        res.status(500).json({ success: false, message: "Database connection failed" });
-    }
+connectDB().catch(err => {
+    console.error("Initial Database connection failed:", err.message);
 });
 
 // Main page health check
