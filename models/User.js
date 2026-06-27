@@ -2,10 +2,12 @@
  * Nexafxtrade User Data Model
  * Path: ./models/User.js
  * Description: Defines the user structure, handles phone numbers, and referrals.
- * Version: 4.0.0 (Fixed missing email & safer referral codes)
+ * Version: 4.0.1 (Fixed Serverless Unique Referral Code Collision)
+ * Brand: Nexafxtrade
  */
 
 const mongoose = require("mongoose");
+const crypto = require("crypto"); // Using built-in Node crypto library for secure strings
 
 const userSchema = new mongoose.Schema({
   // --- Basic Info ---
@@ -16,10 +18,10 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: true,       // Required because our login/register uses email
-    unique: true,         // No two users can have the same email
+    required: true,       
+    unique: true,         
     trim: true,
-    lowercase: true       // Automatically makes emails lowercase to prevent duplicates
+    lowercase: true       
   },
   phone: {
     type: String,
@@ -41,8 +43,8 @@ const userSchema = new mongoose.Schema({
   // --- Referral System (10% Bonus) ---
   referralCode: {
     type: String,
-    unique: true
-    // Note: We generate this in the middleware below to prevent duplicates
+    unique: true,
+    sparse: true // CRITICAL: Tells MongoDB to ignore documents that don't have a referral code yet
   },
   referredBy: {
     type: String, 
@@ -77,7 +79,7 @@ const userSchema = new mongoose.Schema({
 userSchema.pre("save", function(next) {
   
   // 1. Fix Phone Number (Converts '07...' to '2547...')
-  if (this.isModified("phone")) {
+  if (this.isModified("phone") && this.phone) {
     if (this.phone.startsWith("0")) {
       this.phone = "254" + this.phone.substring(1);
     } else if (this.phone.startsWith("+")) {
@@ -85,10 +87,10 @@ userSchema.pre("save", function(next) {
     }
   }
 
-  // 2. Generate a Safe Referral Code (If one doesn't exist yet)
+  // 2. Generate a Cryptographically Secure Safe Referral Code
   if (!this.referralCode) {
-    // Creates a random 8-character code (much safer than 6 characters)
-    this.referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+    // Generates a 4-byte hex string (8 characters total, completely unique e.g., 'A1B2C3D4')
+    this.referralCode = crypto.randomBytes(4).toString("hex").toUpperCase();
   }
 
   next();
