@@ -1,80 +1,81 @@
-/**
- * Nexafxtrade Backend Engine - Authentication Middleware
- * File: middleware/auth.js
- * Description: Validates JWT tokens and protects private terminal routes
- * Version: 4.0.0 (Optimized for Vercel & Unified Logging)
- * Brand: Nexafxtrade
- */
-
+// ================= IMPORTS =================
 const jwt = require("jsonwebtoken");
-const logger = require("../utils/logger");
 
 /**
- * Protect Gatekeeper Middleware
- * Checks for the presence and validity of a Bearer Token
+ * =========================================
+ * AUTHENTICATION MIDDLEWARE (NEXAFX GATEWAY)
+ * =========================================
+ * This middleware safeguards restricted routes by validating the JWT token.
+ * It ensures only authorized operator sessions can interact with the trade engine.
  */
-const protect = async (req, res, next) => {
-  let token;
+module.exports = function auth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
 
-  // Check if token exists in the Authorization header
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    try {
-      // 1. Extract token from Bearer string
-      token = req.headers.authorization.split(" ")[1];
-
-      // Safety check in case the header is exactly "Bearer " with no token
-      if (!token) {
-        return res.status(401).json({
-          success: false,
-          message: "⚠️ Authorization token is missing."
-        });
-      }
-
-      // 2. Decode and verify the token against your secure secret key
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      /**
-       * 3. Attach User Data
-       * We attach the decoded operator ID to the request object.
-       */
-      req.user = decoded.id;
-
-      // 4. Log successful verification using our custom logger
-      logger.info("Terminal access granted", { 
-        operatorId: decoded.id.substring(0, 8) + "...",
-        route: req.path 
-      });
-
-      // 5. Proceed to the next logic in the pipeline
-      next();
-
-    } catch (error) {
-      // Catching expired or tampered tokens
-      logger.warn("Terminal Security Breach: Invalid Token", { 
-        error: error.message,
-        ip: req.ip,
-        route: req.path
-      });
-
+    // ================= CHECK HEADER =================
+    // Verifies that the client transmission included an Authorization header
+    if (!authHeader) {
       return res.status(401).json({
         success: false,
-        message: "❌ Security Authorization Failed. Session expired or invalid.",
+        error: "Access denied. Security handshake missing authorization header."
       });
     }
-  } else {
-    // 6. Handle missing token scenario
-    logger.warn("Terminal Access Denied: No Authorization Token Found", { 
-      route: req.path 
-    });
 
+    // ================= EXTRACT TOKEN =================
+    // Expected incoming structure: "Bearer <token>"
+    const token = authHeader.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: "Access token corrupt or missing from transmission channel."
+      });
+    }
+
+    // ================= VERIFY TOKEN =================
+    // Validates backend environmental integrity before verifying signatures
+    if (!process.env.JWT_SECRET) {
+      console.error("CRITICAL ERROR: JWT_SECRET variable is unassigned in .env context.");
+      return res.status(500).json({ error: "Internal node authentication misconfiguration." });
+    }
+
+    /**
+     * VERIFICATION PIPELINE
+     * Cryptographically checks signature authenticity and decodes the active payload.
+     * The decrypted token structure must yield operator parameters for terminal authorization.
+     */
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (!decoded) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid token structure. Authorization payload rejected."
+      });
+    }
+
+    // ================= ATTACH OPERATOR CONTEXT =================
+    /** * The decoded payload populates:
+     * { id: user._id, email: user.email, phone: user.phone, role: user.role }
+     * This session injection is required by downstream Node Access Control layers.
+     */
+    req.user = decoded;
+
+    // Advance execution matrix to target controller
+    next();
+
+  } catch (err) {
+    // Specific intercept for expired tokens to allow cleaner frontend re-authentication loops
+    if (err.name === "TokenExpiredError") {
+        return res.status(401).json({
+            success: false,
+            error: "Operator session has expired. Re-authenticate access vault."
+        });
+    }
+
+    console.error("GATEWAY AUTH ERROR:", err.message);
     return res.status(401).json({
       success: false,
-      message: "⚠️ Authorization Required. Please log in to your operator node.",
+      error: "Session verification exception. Please refresh credentials."
     });
   }
 };
-
-module.exports = { protect };
