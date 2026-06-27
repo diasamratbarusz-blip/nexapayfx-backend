@@ -2,19 +2,32 @@
  * Nexafxtrade Auth Controller
  * File: controllers/auth.js
  * Description: Secure Registration, Login, and Profile Retrieval.
- * Version: 4.1.0 (Fixed missing phone field)
+ * Version: 4.1.1 (Defensive Logging & Variable Fallbacks for Serverless)
  */
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const logger = require("../utils/logger");
 
+// Helper function to prevent read-only filesystem crashes
+const safeLog = (type, message, meta = {}) => {
+  try {
+    if (logger && typeof logger[type] === 'function') {
+      logger[type](message, meta);
+    } else {
+      console.log(`[${type.toUpperCase()}] ${message}`, JSON.stringify(meta));
+    }
+  } catch (err) {
+    // Fallback completely to default Vercel console logs if the logger crashes
+    console.log(`[FALLBACK-${type.toUpperCase()}] ${message}`);
+  }
+};
+
 // ========================================
 // REGISTER USER
 // ========================================
 exports.register = async (req, res) => {
   try {
-    // FIX: Added 'phone' to the destructuring so we actually grab it from the frontend
     const { name, email, phone, password } = req.body;
 
     // Validate ALL required fields including phone
@@ -44,21 +57,27 @@ exports.register = async (req, res) => {
     const user = await User.create({
       name,
       email,
-      phone, // FIX: Now passing the phone number to the database
+      phone, 
       password: hashedPassword
     });
+
+    // Fallback for JWT secret to prevent unhandled app crashes during deployment testing
+    const secret = process.env.JWT_SECRET || "fallback_local_secret_temp";
+    if (!process.env.JWT_SECRET) {
+      console.warn("WARNING: JWT_SECRET environment variable is not defined in Vercel!");
+    }
 
     // Generate token
     const token = jwt.sign(
       { id: user._id },
-      process.env.JWT_SECRET,
+      secret,
       { expiresIn: "7d" }
     );
 
-    logger.info(`New Operator Registered: ${email}`);
+    safeLog("info", `New Operator Registered: ${email}`);
 
     // Send response
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Registration successful",
       token,
@@ -71,11 +90,12 @@ exports.register = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error("Registration Error", { error: error.message, email: req.body.email });
+    safeLog("error", "Registration Error", { error: error.message, email: req.body?.email });
     
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Server error during registration"
+      message: "Server error during registration",
+      errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -112,15 +132,16 @@ exports.login = async (req, res) => {
       });
     }
 
+    const secret = process.env.JWT_SECRET || "fallback_local_secret_temp";
     const token = jwt.sign(
       { id: user._id },
-      process.env.JWT_SECRET,
+      secret,
       { expiresIn: "7d" }
     );
 
-    logger.info(`Operator Logged In: ${email}`);
+    safeLog("info", `Operator Logged In: ${email}`);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Login successful",
       token,
@@ -133,9 +154,9 @@ exports.login = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error("Login Error", { error: error.message, email: req.body.email });
+    safeLog("error", "Login Error", { error: error.message, email: req.body?.email });
     
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server error during login"
     });
@@ -158,7 +179,7 @@ exports.getMe = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       user: {
         id: user._id,
@@ -170,9 +191,9 @@ exports.getMe = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error("GetMe Error", { error: error.message, userId: req.user.id || req.user });
+    safeLog("error", "GetMe Error", { error: error.message, userId: req.user?.id || req.user });
     
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server error fetching profile"
     });
