@@ -1,68 +1,56 @@
-/**
- * Nexafxtrade Backend Engine - Database Module (Vercel Optimized)
- * File: config/db.js
- * Description: MongoDB Connection with Caching for Serverless
- * Version: 4.0.1 (Optimized for Vercel & Fixed Promise Evaluation)
- */
-
 const mongoose = require("mongoose");
 
 /**
- * Global is used here to maintain a cached connection across serverless 
- * function invocations. This prevents connections from growing exponentially 
- * and exhausting MongoDB Atlas limits.
+ * =========================================
+ * DATABASE CONFIGURATION (NEXAFX MASTER NODE)
+ * =========================================
+ * Establishes and manages the core state pathway to MongoDB.
+ * Engineered with high-velocity optimizations for transaction streams and logging.
  */
-let cached = global.mongoose;
-
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
-}
 
 const connectDB = async () => {
-  // 1. Ensure MONGO_URI is actually loaded
-  if (!process.env.MONGO_URI) {
-    throw new Error("Database environment variable MONGO_URI is missing.");
-  }
-
-  // 2. If we already have a cached connection, reuse it instantly
-  if (cached.conn) {
-    return cached.conn;
-  }
-
-  // 3. If not, establish a new connection promise
-  if (!cached.promise) {
-    const opts = {
-      autoIndex: true, // Set to false in high-traffic production if schemas are static
-      serverSelectionTimeoutMS: 5000, 
-      socketTimeoutMS: 45000,
-      bufferCommands: false, // Crucial for serverless environments
-    };
-
-    // Keep the raw promise straight from mongoose
-    cached.promise = mongoose.connect(process.env.MONGO_URI, opts);
-  }
-  
   try {
-    cached.conn = await cached.promise;
-    
-    console.log("====================================");
-    console.log(`NEXAFX DATABASE: ONLINE`);
-    console.log(`Host: ${cached.conn.connection.host}`);
-    console.log("Status: Connection Synchronized (Cached)");
-    console.log("====================================");
-    
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      autoIndex: true, // Crucial for enforcing unique indexes like Transaction IDs or User email hashes
+      
+      /**
+       * TERMINAL PRODUCTION PARAMETERS:
+       * maxPoolSize: Dictates maximum concurrent sockets available to handle high-frequency requests.
+       * serverSelectionTimeoutMS: Forces immediate failure flags if clusters do not respond within 5s.
+       * socketTimeoutMS: Terminates inactive processing pipelines to prevent thread locks.
+       * family: Restricts resolution to IPv4 for absolute network routing stability across hosting clusters.
+       */
+      maxPoolSize: 10, 
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000, 
+      family: 4 
+    });
+
+    console.log(`✅ NexaFX Database Connected: ${conn.connection.host}`);
+
+    // ==========================================
+    // PERSISTENT RUNTIME MONITORING
+    // ==========================================
+    mongoose.connection.on('disconnected', () => {
+      console.log('⚠️ NexaFX Database Link Terminated! Re-initializing routing engine...');
+      setTimeout(connectDB, 5000);
+    });
+
+    mongoose.connection.on('error', (err) => {
+      console.error(`❌ NexaFX Database Runtime Exception: ${err.message}`);
+    });
+
   } catch (error) {
-    cached.promise = null; // Reset promise on failure so it can retry next time
-    
-    console.error("====================================");
-    console.error("NEXAFX DATABASE: CONNECTION FAILED");
-    console.error(`Error Logic: ${error.message}`);
-    console.error("====================================");
+    console.error("❌ NexaFX Database Handshake Failure:", error.message);
 
-    throw new Error(`MongoDB Connection Failed: ${error.message}`);
+    /**
+     * RETRY LOOP PIPELINE:
+     * Prevents permanent container crash loops on cloud hosting platforms (like Vercel serverless limits or cold starts).
+     * Automatically attempts to restore infrastructure sync every 5000ms.
+     */
+    console.log("🔄 Re-attempting database sync in 5 seconds...");
+    setTimeout(connectDB, 5000);
   }
-
-  return cached.conn;
 };
 
 module.exports = connectDB;
