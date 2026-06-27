@@ -16,7 +16,6 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const connectDB = require("./config/db");
-const logger = require("./utils/logger");
 
 // ================= MODELS =================
 const User = require("./models/User");
@@ -25,42 +24,46 @@ const app = express();
 
 /**
  * =========================================
- * MIDDLEWARE & CONFIGURATION
+ * CORS & PREFLIGHT WIRE ROUTING (FIXED)
  * =========================================
  */
+const allowedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "http://localhost:3001",
+    "http://127.0.0.1:5500"
+];
+
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
+        // Allow programmatic requests with no origin context (like mobile apps, postman, or curl)
         if (!origin) return callback(null, true);
         
-        // Match Vercel preview environments dynamically
-        if (/\.vercel\.app$/.test(origin)) {
+        // Match development environments
+        if (allowedOrigins.indexOf(origin) !== -1) {
             return callback(null, true);
         }
 
-        // Match primary production domain
-        if (/nexafxtrade\.com$/.test(origin)) {
+        // Safer wildcard inclusions for custom domain targets
+        if (origin.includes("vercel.app") || origin.includes("nexafxtrade.com")) {
             return callback(null, true);
         }
         
-        // Allowed development environments
-        const allowedOrigins = [
-            "http://localhost:3000",
-            "http://localhost:5000",
-            "http://localhost:3001",
-            "http://127.0.0.1:5500"
-        ];
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error("Not allowed by CORS"));
-        }
+        return callback(new Error("Not allowed by CORS engine"));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-API-Key"],
     credentials: true
 }));
+
+// Globally intercept and respond instantly to preflight OPTIONS checks before any database execution blocks them
+app.options("*", (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,X-API-Key");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    return res.sendStatus(200);
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -84,7 +87,7 @@ app.use(async (req, res, next) => {
         next();
     } catch (err) {
         console.error("❌ Middleware Database Connection Failure:", err.message);
-        res.status(500).json({ error: "Database connectivity error." });
+        return res.status(500).json({ error: "Database connectivity error." });
     }
 });
 
@@ -132,14 +135,12 @@ function auth(req, res, next) {
  */
 const handleMpesaCallback = async (req, res) => {
     try {
-        // Support both direct Safaricom objects and wrapped custom events
         const callbackData = req.body?.Body?.stkCallback || req.body?.data?.transaction;
         
         if (!callbackData) {
             return res.status(400).send("Invalid callback envelope structure.");
         }
 
-        // Processing codes based on transmission source
         const resultCode = callbackData.ResultCode !== undefined ? callbackData.ResultCode : 0;
 
         if (resultCode === 0) {
@@ -154,12 +155,7 @@ const handleMpesaCallback = async (req, res) => {
                 phone = callbackData.mobile_number || callbackData.phone;
             }
             
-            // Clean log safety wrappers
-            if (logger && typeof logger.mpesa === 'function') {
-                logger.mpesa(`Deposit Confirmed: KES ${amount} for ${phone}`);
-            } else {
-                console.log(`[MPESA] Deposit Confirmed: KES ${amount} for ${phone}`);
-            }
+            console.log(`[MPESA] Deposit Confirmed: KES ${amount} for ${phone}`);
         } 
         res.status(200).send("OK");
     } catch (err) {
