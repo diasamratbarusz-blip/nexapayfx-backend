@@ -2,7 +2,7 @@
  * Nexafxtrade Authentication Routing Node
  * File: routes/auth.js
  * Description: Maps network endpoints to the Auth Controller logic.
- * Version: 4.0.0 (Optimized for Vercel)
+ * Version: 4.0.1 (Fixed Middleware Import)
  * Brand: Nexafxtrade
  */
 
@@ -10,8 +10,8 @@ const express = require("express");
 const router = express.Router();
 
 // Import Middleware
-// This protects private routes from unauthorized access
-const { protect } = require("../middleware/auth");
+// FIX: Removed curly braces to correctly import the default exported function
+const protect = require("../middleware/auth");
 
 // Import Controllers 
 const {
