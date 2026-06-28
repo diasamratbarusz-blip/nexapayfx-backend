@@ -85,10 +85,6 @@ exports.register = async (req, res) => {
   } catch (error) {
     safeLog("error", "Registration Error", { error: error.message, email: req.body?.email });
     
-    // ==========================================================
-    // CRITICAL LIVE DIAGNOSTIC TRAP
-    // This tells us the exact block, string, or index that fails.
-    // ==========================================================
     return res.status(500).json({
       success: false,
       message: "Server error during registration",
