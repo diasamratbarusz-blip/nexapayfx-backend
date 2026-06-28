@@ -2,17 +2,19 @@
  * Nexafxtrade User Management Routing Node
  * Path: ./routes/User.js
  * Description: Handles secure operator profile and financial data endpoints.
- * Version: 3.3.0 (May 2026)
+ * Version: 3.3.1 (Fixed Middleware Import)
  */
 
 const express = require("express");
 const router = express.Router();
 
 // Import Security Middleware
-const { protect } = require("../middleware/auth");
+// FIX: Removed curly braces to correctly import the default exported function
+const protect = require("../middleware/auth");
 
 // Import Controllers 
-/** * Note: These controllers handle the logic for fetching and updating 
+/** 
+ * Note: These controllers handle the logic for fetching and updating 
  * specific operator parameters in the MongoDB matrix.
  */
 const {
