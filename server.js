@@ -1,6 +1,6 @@
 /**
  * Nexafxtrade Backend Engine (Vercel Serverless Premium Edition)
- * Version: 5.1.0 (Fixed Route Capitalization)
+ * Version: 5.2.0 (Guaranteed Dashboard Data Routes Added)
  * Brand: Nexafxtrade
  */
 
@@ -160,11 +160,75 @@ app.post("/api/mpesa/callback", handleMpesaCallback);
 
 /**
  * =========================================
+ * GUARANTEED USER PROFILE & BALANCE ROUTES
+ * =========================================
+ * These routes are added directly to server.js to ensure the dashboard 
+ * always receives the exact data format it expects, bypassing any 
+ * potential issues in the separate controller files.
+ */
+app.get("/api/user/profile", auth, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select("-password");
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        res.json({
+            success: true,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                balance: user.balance || 0
+            }
+        });
+    } catch (error) {
+        console.error("Profile fetch error:", error);
+        res.status(500).json({ success: false, message: "Server error fetching profile" });
+    }
+});
+
+app.put("/api/user/balance", auth, async (req, res) => {
+    try {
+        const { amount, action } = req.body;
+        if (!amount || !action) {
+            return res.status(400).json({ success: false, message: "Amount and action are required" });
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        if (action === "add") {
+            user.balance = (user.balance || 0) + parseFloat(amount);
+        } else if (action === "subtract") {
+            if ((user.balance || 0) < parseFloat(amount)) {
+                return res.status(400).json({ success: false, message: "Insufficient funds" });
+            }
+            user.balance = (user.balance || 0) - parseFloat(amount);
+        } else {
+            return res.status(400).json({ success: false, message: "Invalid action" });
+        }
+
+        await user.save();
+
+        res.json({
+            success: true,
+            message: "Balance updated successfully",
+            newBalance: user.balance
+        });
+    } catch (error) {
+        console.error("Balance update error:", error);
+        res.status(500).json({ success: false, message: "Server error updating balance" });
+    }
+});
+
+/**
+ * =========================================
  * ROUTE BINDING (FIXED CAPITALIZATION)
  * =========================================
  */
-// ⚠️ LOOK HERE: Changed "./routes/auth" to "./routes/Auth" (Capital A)
-// ⚠️ LOOK HERE: Changed "./routes/user" to "./routes/User" (Capital U)
 const authRoutes = require("./routes/Auth");         
 const paymentRoutes = require("./routes/paymentRoutes"); 
 const userRoutes = require("./routes/User"); 
@@ -195,7 +259,7 @@ app.get("/", (req, res) => {
         status: "online", 
         brand: "Nexafxtrade",
         message: "High-Performance Trading Engine Running on Vercel Serverless Architecture.",
-        version: "5.1.0"
+        version: "5.2.0"
     });
 });
 
