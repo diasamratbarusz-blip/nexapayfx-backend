@@ -10,7 +10,9 @@ const mongoose = require("mongoose");
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
+    const dbUri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/nexafx";
+    
+    const conn = await mongoose.connect(dbUri, {
       autoIndex: true, // Crucial for enforcing unique indexes like Transaction IDs or User email hashes
       
       /**
