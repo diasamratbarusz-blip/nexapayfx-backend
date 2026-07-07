@@ -15,7 +15,7 @@ const path = require("path");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const connectDB = require("./config/db");
+const connectDB = require("./config/database");
 
 // ================= MODELS =================
 const User = require("./models/User");
@@ -178,7 +178,7 @@ app.get("/api/user/profile", auth, async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                phone: user.phone,
+                phone: user.phoneNumber || user.phone,
                 balance: user.balance || 0
             }
         });
