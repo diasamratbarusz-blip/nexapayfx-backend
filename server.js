@@ -20,6 +20,14 @@ const connectDB = require("./config/db");
 // ================= MODELS =================
 const User = require("./models/User");
 
+// Simple schema inline to store admin-controlled market overrides if not already defined
+const AdminControlSchema = new mongoose.Schema({
+    key: { type: String, required: true, unique: true },
+    value: mongoose.Schema.Types.Mixed
+}, { timestamps: true });
+
+const AdminControl = mongoose.models.AdminControl || mongoose.model("AdminControl", AdminControlSchema);
+
 const app = express();
 
 /**
@@ -114,6 +122,33 @@ function auth(req, res, next) {
         next();
     } catch (err) {
         return res.status(401).json({ error: "Invalid or expired token" });
+    }
+}
+
+/**
+ * =========================================
+ * ADMIN VERIFICATION MIDDLEWARE
+ * =========================================
+ */
+function adminAuth(req, res, next) {
+    try {
+        const header = req.headers.authorization;
+        if (!header) return res.status(401).json({ error: "Access denied. No token provided." });
+        
+        const token = header.split(" ")[1];
+        if (!token) return res.status(401).json({ error: "Invalid authorization token" });
+        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // Verifies role matches admin criteria
+        if (decoded.role !== "admin" && decoded.email !== process.env.ADMIN_EMAIL) {
+            return res.status(403).json({ error: "Forbidden. Administrative privileges required." });
+        }
+        
+        req.user = decoded;
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: "Invalid or expired administrative token" });
     }
 }
 
@@ -226,6 +261,84 @@ app.put("/api/user/balance", auth, async (req, res) => {
 
 /**
  * =========================================
+ * REMOTE MANAGEMENT / ADMINISTRATIVE INTERFACES
+ * =========================================
+ * These endpoints interact with your separate admin repository interface 
+ * to fetch user registries, force balance alterations, and manage market trends.
+ */
+
+// Admin Dashboard: Fetch all users catalog
+app.get("/api/admin/users", adminAuth, async (req, res) => {
+    try {
+        const users = await User.find({}).select("-password").sort({ createdAt: -1 });
+        res.json({ success: true, users });
+    } catch (error) {
+        console.error("Admin user catalog fetch error:", error);
+        res.status(500).json({ success: false, message: "Failed to retrieve users" });
+    }
+});
+
+// Admin Dashboard: Directly alter or set any user's balance remotely
+app.put("/api/admin/user/balance-override", adminAuth, async (req, res) => {
+    try {
+        const { userId, targetBalance } = req.body;
+        if (userId === undefined || targetBalance === undefined) {
+            return res.status(400).json({ success: false, message: "userId and targetBalance required" });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Target user profile not found" });
+        }
+
+        user.balance = parseFloat(targetBalance);
+        await user.save();
+
+        res.json({ 
+            success: true, 
+            message: `User balance manually overwritten to ${user.balance}`, 
+            updatedBalance: user.balance 
+        });
+    } catch (error) {
+        console.error("Admin balance adjustment failure:", error);
+        res.status(500).json({ success: false, message: "Failed to modify remote wallet balance" });
+    }
+});
+
+// Admin Dashboard: Force/Override global market ticker rate
+app.post("/api/admin/market/override", adminAuth, async (req, res) => {
+    try {
+        const { forcedRate } = req.body;
+        if (!forcedRate) {
+            return res.status(400).json({ success: false, message: "forcedRate parameter is required" });
+        }
+
+        await AdminControl.findOneAndUpdate(
+            { key: "market_rate_override" },
+            { value: parseFloat(forcedRate) },
+            { upsert: true, new: true }
+        );
+
+        res.json({ success: true, message: `Market trend pinned to ${forcedRate}` });
+    } catch (error) {
+        console.error("Market configuration save error:", error);
+        res.status(500).json({ success: false, message: "Failed to pin market trend metric" });
+    }
+});
+
+// Admin Dashboard: Reset market trend back to algorithmic variance
+app.delete("/api/admin/market/override", adminAuth, async (req, res) => {
+    try {
+        await AdminControl.deleteOne({ key: "market_rate_override" });
+        res.json({ success: true, message: "Market pricing reverted to standard algorithmic updates" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to clear price rule configuration" });
+    }
+});
+
+
+/**
+ * =========================================
  * ROUTE BINDING (FIXED CAPITALIZATION)
  * =========================================
  */
@@ -239,14 +352,25 @@ app.use("/api/user", userRoutes);
 
 /**
  * =========================================
- * MARKET RATE INTERFACES
+ * MARKET RATE INTERFACES (UPDATED FOR REMOTE ADMIN CONTROL)
  * =========================================
  */
-app.get("/api/market/rate", (req, res) => {
-    const baseRate = 8421500; 
-    const dynamicShift = (Math.random() - 0.48) * (8500 / 15);
-    const currentMarketRate = Math.floor(baseRate + dynamicShift);
-    res.json({ rate: currentMarketRate });
+app.get("/api/market/rate", async (req, res) => {
+    try {
+        // First check if an administrative manual control rule exists in database
+        const override = await AdminControl.findOne({ key: "market_rate_override" });
+        if (override && override.value) {
+            return res.json({ rate: override.value });
+        }
+        
+        // Revert to default simulation math loop if no administrative price override exists
+        const baseRate = 8421500; 
+        const dynamicShift = (Math.random() - 0.48) * (8500 / 15);
+        const currentMarketRate = Math.floor(baseRate + dynamicShift);
+        res.json({ rate: currentMarketRate });
+    } catch (error) {
+        res.json({ rate: 8421500 });
+    }
 });
 
 /**
