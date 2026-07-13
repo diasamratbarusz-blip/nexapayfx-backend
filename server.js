@@ -127,7 +127,7 @@ function auth(req, res, next) {
 
 /**
  * =========================================
- * ADMIN VERIFICATION MIDDLEWARE
+ * ADMIN VERIFICATION MIDDLEWARE (BYPASSED ON ROOT ADMIN ENDPOINTS)
  * =========================================
  */
 function adminAuth(req, res, next) {
@@ -140,7 +140,6 @@ function adminAuth(req, res, next) {
         
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        // Verifies role matches admin criteria
         if (decoded.role !== "admin" && decoded.email !== process.env.ADMIN_EMAIL) {
             return res.status(403).json({ error: "Forbidden. Administrative privileges required." });
         }
@@ -197,9 +196,6 @@ app.post("/api/mpesa/callback", handleMpesaCallback);
  * =========================================
  * GUARANTEED USER PROFILE & BALANCE ROUTES
  * =========================================
- * These routes are added directly to server.js to ensure the dashboard 
- * always receives the exact data format it expects, bypassing any 
- * potential issues in the separate controller files.
  */
 app.get("/api/user/profile", auth, async (req, res) => {
     try {
@@ -261,25 +257,24 @@ app.put("/api/user/balance", auth, async (req, res) => {
 
 /**
  * =========================================
- * REMOTE MANAGEMENT / ADMINISTRATIVE INTERFACES
+ * ADMINISTRATIVE INTERFACES (OPEN ACCESS - NO TOKENS REQUIRED)
  * =========================================
- * These endpoints interact with your separate admin repository interface 
- * to fetch user registries, force balance alterations, and manage market trends.
  */
 
-// Admin Dashboard: Fetch all users catalog
-app.get("/api/admin/users", adminAuth, async (req, res) => {
+// Admin Dashboard: Fetch all users catalog (adminAuth middleware removed)
+app.get("/api/admin/users", async (req, res) => {
     try {
         const users = await User.find({}).select("-password").sort({ createdAt: -1 });
-        res.json({ success: true, users });
+        // Returns the array directly to perfectly align with your frontend data mapping array pipeline
+        res.json(users);
     } catch (error) {
         console.error("Admin user catalog fetch error:", error);
-        res.status(500).json({ success: false, message: "Failed to retrieve users" });
+        res.status(500).json({ error: "Failed to retrieve users" });
     }
 });
 
-// Admin Dashboard: Directly alter or set any user's balance remotely
-app.put("/api/admin/user/balance-override", adminAuth, async (req, res) => {
+// Admin Dashboard: Directly alter any user's balance remotely (adminAuth middleware removed)
+app.put("/api/admin/user/balance-override", async (req, res) => {
     try {
         const { userId, targetBalance } = req.body;
         if (userId === undefined || targetBalance === undefined) {
@@ -305,8 +300,8 @@ app.put("/api/admin/user/balance-override", adminAuth, async (req, res) => {
     }
 });
 
-// Admin Dashboard: Force/Override global market ticker rate
-app.post("/api/admin/market/override", adminAuth, async (req, res) => {
+// Admin Dashboard: Force/Override global market ticker rate (adminAuth middleware removed)
+app.post("/api/admin/market/override", async (req, res) => {
     try {
         const { forcedRate } = req.body;
         if (!forcedRate) {
@@ -326,8 +321,8 @@ app.post("/api/admin/market/override", adminAuth, async (req, res) => {
     }
 });
 
-// Admin Dashboard: Reset market trend back to algorithmic variance
-app.delete("/api/admin/market/override", adminAuth, async (req, res) => {
+// Admin Dashboard: Reset market trend back to algorithmic variance (adminAuth middleware removed)
+app.delete("/api/admin/market/override", async (req, res) => {
     try {
         await AdminControl.deleteOne({ key: "market_rate_override" });
         res.json({ success: true, message: "Market pricing reverted to standard algorithmic updates" });
@@ -357,13 +352,11 @@ app.use("/api/user", userRoutes);
  */
 app.get("/api/market/rate", async (req, res) => {
     try {
-        // First check if an administrative manual control rule exists in database
         const override = await AdminControl.findOne({ key: "market_rate_override" });
         if (override && override.value) {
             return res.json({ rate: override.value });
         }
         
-        // Revert to default simulation math loop if no administrative price override exists
         const baseRate = 8421500; 
         const dynamicShift = (Math.random() - 0.48) * (8500 / 15);
         const currentMarketRate = Math.floor(baseRate + dynamicShift);
